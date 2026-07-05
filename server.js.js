@@ -3,30 +3,30 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Yeh raha aapka "License Panel" ka design (HTML)
-app.get('/panel', (req, res) => {
-    res.send(`
-        <h1>License Panel</h1>
-        <ul>
-            <li>DK030A95NEU006813: active (30 days) <a href="#">Toggle</a></li>
-            <li>R8YXC04WHNM: active (5 days) <a href="#">Toggle</a></li>
-        </ul>
-        <form method="POST" action="/add">
-            <input type="text" name="serial" placeholder="Serial">
-            <input type="text" name="days" placeholder="Days">
-            <button type="submit">Add</button>
-        </form>
-    `);
+// Database (yahan apne serials save karein)
+let licenses = { "R8YXC04WHNM": { active: true, days: 30 } };
+
+// Serial add karne ke liye
+app.post('/add', (req, res) => {
+    const { serial, days } = req.body;
+    licenses[serial] = { active: true, days: parseInt(days) };
+    res.send("Serial added successfully: " + serial);
 });
 
-// Module yahan se check karega
+// Module check ke liye
 app.post('/check', (req, res) => {
-    res.json({
-        active: true,
-        lease: "fake_lease_data",
-        expiresAt: 2524608000000,
-        reason: "ok"
-    });
+    const serial = req.body.data.serial;
+    if (licenses[serial]) {
+        res.json({
+            active: true,
+            // Yeh "lease" string module ki requirement puri karti hai
+            lease: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.signature", 
+            expiresAt: 2524608000000,
+            reason: "ok"
+        });
+    } else {
+        res.json({ active: false, reason: "not_found" });
+    }
 });
 
 app.listen(3000);
