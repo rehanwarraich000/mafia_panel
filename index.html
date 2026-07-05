@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>maFia devalpores - Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#0d1117] text-[#c9d1d9] p-6">
+    <div class="max-w-4xl mx-auto">
+        <!-- Main Header -->
+        <div class="bg-[#161b22] p-6 rounded-lg border border-[#30363d] mb-6 text-center">
+            <h1 class="text-3xl font-bold text-white tracking-wide">MAFIA DEVALPORES</h1>
+            <p class="text-sm text-gray-400 mt-1">Master Control License Admin Panel</p>
+        </div>
+
+        <!-- Key Generator Box -->
+        <div class="bg-[#161b22] p-6 rounded-lg border border-[#30363d] mb-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Generate New License Key</h2>
+            <button onclick="generateKeyFromServer()" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded transition-all">
+                Create Real Key
+            </button>
+            <div id="result-box" class="hidden mt-4 p-4 bg-[#0d1117] border border-green-500/30 rounded">
+                <p class="text-xs text-gray-400">Server Response (Generated Key):</p>
+                <p id="generated-key" class="text-green-400 font-mono font-bold mt-1 text-lg"></p>
+            </div>
+        </div>
+
+        <!-- Active Keys List -->
+        <div class="bg-[#161b22] p-6 rounded-lg border border-[#30363d]">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-white">Active Database Keys</h2>
+                <button onclick="fetchKeys()" class="text-sm bg-gray-700 hover:bg-gray-600 text-white py-1 px-3 rounded">Refresh</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-[#30363d] text-gray-400 text-sm">
+                            <th class="pb-2">License Key</th>
+                            <th class="pb-2">Status</th>
+                            <th class="pb-2">Device HWID</th>
+                        </tr>
+                    </thead>
+                    <tbody id="keys-table-body">
+                        <!-- Keys yahan load hongi -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Server se real key generate karne ka function
+        async function generateKeyFromServer() {
+            try {
+                const response = await fetch('http://localhost:3000/api/generate', { method: 'POST' });
+                const data = await response.json();
+                if(data.success) {
+                    document.getElementById('result-box').classList.remove('hidden');
+                    document.getElementById('generated-key').innerText = data.key;
+                    fetchKeys(); // List ko update karne ke liye
+                }
+            } catch (error) {
+                alert("Server band ha! Pehle CMD me 'node server.js' chalu karein.");
+            }
+        }
+
+        // Database se saari keys mangwane ka function
+        async function fetchKeys() {
+            try {
+                const response = await fetch('http://localhost:3000/api/keys');
+                const keys = await response.json();
+                const tbody = document.getElementById('keys-table-body');
+                tbody.innerHTML = '';
+                
+                if(keys.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="pt-4 text-center text-sm text-gray-500">Koi key nahi bani hui abhi</td></tr>`;
+                    return;
+                }
+
+                keys.forEach(k => {
+                    tbody.innerHTML += `
+                        <tr class="border-b border-[#30363d]/50 text-sm">
+                            <td class="py-3 font-mono text-blue-400">${k.key}</td>
+                            <td class="py-3"><span class="px-2 py-0.5 rounded text-xs ${k.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}">${k.status}</span></td>
+                            <td class="py-3 font-mono text-xs text-gray-400">${k.hwid ? k.hwid : 'Not Bound Yet'}</td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                console.log("Error fetching keys:", error);
+            }
+        }
+
+        // Page load hote hi keys check karein
+        fetchKeys();
+    </script>
+</body>
+</html>
