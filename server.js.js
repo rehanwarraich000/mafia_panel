@@ -1,23 +1,32 @@
 const express = require('express');
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// GET request ke liye (Browser mein show karne ke liye)
-app.get('/check', (req, res) => {
-    res.send("Server is running and waiting for module request.");
+// Yeh raha aapka "License Panel" ka design (HTML)
+app.get('/panel', (req, res) => {
+    res.send(`
+        <h1>License Panel</h1>
+        <ul>
+            <li>DK030A95NEU006813: active (30 days) <a href="#">Toggle</a></li>
+            <li>R8YXC04WHNM: active (5 days) <a href="#">Toggle</a></li>
+        </ul>
+        <form method="POST" action="/add">
+            <input type="text" name="serial" placeholder="Serial">
+            <input type="text" name="days" placeholder="Days">
+            <button type="submit">Add</button>
+        </form>
+    `);
 });
 
-// POST request ke liye (Module yahan data bhejega)
+// Module yahan se check karega
 app.post('/check', (req, res) => {
-    // Module ka data yahan receive hoga
-    console.log("Data received:", req.body);
-    
     res.json({
         active: true,
-        lease: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjoic3VjY2VzcyJ9.signature_code",
+        lease: "fake_lease_data",
         expiresAt: 2524608000000,
         reason: "ok"
     });
 });
 
-app.listen(3000, () => console.log("Server chal raha hai"));
+app.listen(3000);
