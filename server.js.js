@@ -3,13 +3,15 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Data memory mein rahega (Server restart pe wipe hoga)
+// Data memory mein rahega
 let licenses = { "R8YXC04WHNM": { days: 30 } };
 
 app.get('/panel', (req, res) => {
-    let html = '<h1>Panel</h1><ul>';
-    for (let s in licenses) { html += `<li>${s} - ${licenses[s].days} days</li>`; }
-    res.send(html + '</ul><form method="POST" action="/add"><input name="serial" placeholder="Serial" required><input name="days" placeholder="Days" required><button>Add</button></form>');
+    let html = '<h1>Mafia Panel</h1><ul>';
+    for (let s in licenses) { 
+        html += `<li>${s} - ${licenses[s].days} days</li>`; 
+    }
+    res.send(html + '</ul><hr><form method="POST" action="/add"><input name="serial" placeholder="Serial" required><input name="days" placeholder="Days" required><button type="submit">Add/Update</button></form>');
 });
 
 app.post('/add', (req, res) => {
@@ -31,4 +33,8 @@ app.post('/check', (req, res) => {
     }
 });
 
-app.listen(process.env.PORT || 3000);
+// Render ke liye perfect Port binding
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+});
