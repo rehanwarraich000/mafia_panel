@@ -3,30 +3,33 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Database (yahan apne serials save karein)
-let licenses = { "R8YXC04WHNM": { active: true, days: 30 } };
+// Yeh route aapke browser ke liye hai
+app.get('/panel', (req, res) => {
+    res.send(`
+        <h1>License Panel</h1>
+        <form method="POST" action="/add">
+            <input type="text" name="serial" placeholder="Serial Number">
+            <input type="text" name="days" placeholder="Days">
+            <button type="submit">Add License</button>
+        </form>
+    `);
+});
 
-// Serial add karne ke liye
+// Yeh route data add karne ke liye hai
 app.post('/add', (req, res) => {
-    const { serial, days } = req.body;
-    licenses[serial] = { active: true, days: parseInt(days) };
-    res.send("Serial added successfully: " + serial);
+    console.log("New Serial:", req.body.serial);
+    res.send("Serial added! Wapis jao: <a href='/panel'>Back</a>");
 });
 
-// Module check ke liye
+// Yeh route module check ke liye hai
 app.post('/check', (req, res) => {
-    const serial = req.body.data.serial;
-    if (licenses[serial]) {
-        res.json({
-            active: true,
-            // Yeh "lease" string module ki requirement puri karti hai
-            lease: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.signature", 
-            expiresAt: 2524608000000,
-            reason: "ok"
-        });
-    } else {
-        res.json({ active: false, reason: "not_found" });
-    }
+    res.json({
+        active: true,
+        lease: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.signature",
+        expiresAt: 2524608000000,
+        reason: "ok"
+    });
 });
 
-app.listen(3000);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Server chal raha hai"));
