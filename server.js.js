@@ -1,26 +1,26 @@
 const express = require('express');
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-let licenses = { "R8YXC04WHNM": { days: 30 } }; // Apne serial yahan add karo
+let licenses = { "R8YXC04WHNM": { expires: 2524608000000 } };
 
-// Panel view
 app.get('/panel', (req, res) => {
-    res.send('<h1>Mafia Panel</h1><p>Server is Active</p>');
+    res.send(`<h1>License Panel</h1><form method="POST" action="/add"><input name="serial" placeholder="Serial"><input name="days" placeholder="Days"><button type="submit">Add</button></form>`);
 });
 
-// Module request handler
-app.post('/panel', (req, res) => {
+app.post('/add', (req, res) => {
+    licenses[req.body.serial] = { expires: Date.now() + (req.body.days * 86400000) };
+    res.send("Added! <a href='/panel'>Back</a>");
+});
+
+app.post('/check', (req, res) => {
     const serial = req.body.data ? req.body.data.serial : null;
     if (serial && licenses[serial]) {
-        res.json({ 
-            active: true, 
-            lease: "OK", 
-            expiresAt: Date.now() + (licenses[serial].days * 86400000) 
-        });
+        res.json({ active: true, lease: "VALID", expiresAt: licenses[serial].expires });
     } else {
         res.json({ active: false });
     }
 });
 
-app.listen(process.env.PORT || 3000, '0.0.0.0');
+app.listen(process.env.PORT || 3000);
