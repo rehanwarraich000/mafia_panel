@@ -70,7 +70,8 @@ app.post('/check', (req, res) => {
     if (!serial) {
         return res.status(400).json({ 
             active: false, 
-            reason: "not_found",
+            days: 0,
+            lease: "",
             message: "Serial parameter missing" 
         });
     }
@@ -82,15 +83,14 @@ app.post('/check', (req, res) => {
             active: true,
             days: device.days,
             lease: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY3RpdmUiOnRydWUsInNlcmlhbCI6InN1Y2Nlc3MifQ.signature",
-            reason: "verified",
             message: "License is active and verified!"
         });
     } else {
         res.json({
             active: false,
             days: 0,
-            reason: "not_found",
-            message: "Send this serial to Admin for activation."
+            lease: "",
+            message: "License is not active."
         });
     }
 });
