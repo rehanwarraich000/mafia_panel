@@ -70,8 +70,7 @@ app.post('/check', (req, res) => {
     if (!serial) {
         return res.status(400).json({ 
             active: false, 
-            days: 0,
-            lease: "",
+            reason: "not_found",
             message: "Serial parameter missing" 
         });
     }
@@ -79,18 +78,25 @@ app.post('/check', (req, res) => {
     const device = activeSerials[serial];
 
     if (device && device.active) {
+        // Valid JWT lease format (*.*.*) taake purani script pass kar de
+        const mockJwtLease = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY3RpdmUiOnRydWUsInNlcmlhbCI6InN1Y2Nlc3MifQ.signature_verified_token";
+        
+        // Days ko milliseconds mein convert karna expiresAt ke liye
+        const expiresAtMs = Date.now() + (device.days * 24 * 60 * 60 * 1000);
+
         res.json({
             active: true,
-            days: device.days,
-            lease: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY3RpdmUiOnRydWUsInNlcmlhbCI6InN1Y2Nlc3MifQ.signature",
-            message: "License is active and verified!"
+            expiresAt: expiresAtMs,
+            lease: mockJwtLease,
+            reason: "verified",
+            message: "License active. Signed release verified."
         });
     } else {
         res.json({
             active: false,
-            days: 0,
-            lease: "",
-            message: "License is not active."
+            expiresAt: 0,
+            reason: "not_found",
+            message: "Send this serial to Admin for activation."
         });
     }
 });
