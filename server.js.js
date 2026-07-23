@@ -3,7 +3,7 @@ const cors = require('cors'); // CORS middleware ko import kiya
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS ko poori tarah allow kiya taaki mobile devices bina error ke connect ho sakein
+// CORS ko poori tarah allow kiya taaki mobile devices bina error के connect ho sakein
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST'],
@@ -75,7 +75,11 @@ app.post('/check', (req, res) => {
     const serial = req.body.serial || (req.body.data && req.body.data.serial);
     
     if (!serial) {
-        return res.status(400).json({ active: false, message: "Serial parameter missing" });
+        return res.status(400).json({ 
+            active: false, 
+            reason: "not_found",
+            message: "Serial parameter missing" 
+        });
     }
 
     const device = activeSerials[serial];
@@ -84,12 +88,15 @@ app.post('/check', (req, res) => {
         res.json({
             active: true,
             days: device.days,
+            lease: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY3RpdmUiOnRydWUsInNlcmlhbCI6InN1Y2Nlc3MifQ.signature",
+            reason: "verified",
             message: "License is active and verified!"
         });
     } else {
         res.json({
             active: false,
             days: 0,
+            reason: "not_found",
             message: "Send this serial to Admin for activation."
         });
     }
