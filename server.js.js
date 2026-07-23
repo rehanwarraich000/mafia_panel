@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors'); // CORS middleware ko import kiya
-const session = require('express-session'); // Session management ke liye lock/password protect karne ko
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -12,22 +11,18 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // Form data parse karne ke liye login route mein
-
-// --- SESSION CONFIGURATION FOR LOGIN LOCK ---
-app.use(session({
-    secret: 'mafia_secret_lock_key_999!',
-    resave: false,
-    saveUninitialized: false
-}));
+app.use(express.urlencoded({ extended: true }));
 
 // In-memory database array (Aap ise database se replace kar sakte hain)
 let activeSerials = {}; 
 
+// --- SIMPLE SESSION / TOKEN STORAGE (In-memory) ---
+let adminSessions = {};
+
 // --- ADMIN API FOR ADD/UPDATE VIA PANEL ---
 app.post('/api/admin/serial', (req, res) => {
-    // Agar login nahi hai toh API block kar do
-    if (!req.session || !req.session.isAdmin) {
+    const token = req.headers['authorization'];
+    if (!token || !adminSessions[token]) {
         return res.status(401).json({ error: "Unauthorized! Please login first." });
     }
 
@@ -36,7 +31,6 @@ app.post('/api/admin/serial', (req, res) => {
         return res.status(400).json({ error: "Serial is required" });
     }
     
-    // Agar serial pehle se hai toh status wahi rakho, naye mein default active: true
     const existingActive = activeSerials[serial] ? activeSerials[serial].active : true;
 
     activeSerials[serial] = {
@@ -48,7 +42,8 @@ app.post('/api/admin/serial', (req, res) => {
 
 // --- NEW API TO TOGGLE ACTIVE / DEACTIVE STATUS ---
 app.post('/api/admin/toggle', (req, res) => {
-    if (!req.session || !req.session.isAdmin) {
+    const token = req.headers['authorization'];
+    if (!token || !adminSessions[token]) {
         return res.status(401).json({ error: "Unauthorized" });
     }
     const { serial } = req.body;
@@ -62,7 +57,8 @@ app.post('/api/admin/toggle', (req, res) => {
 
 // --- NEW API TO DELETE SERIAL ---
 app.post('/api/admin/delete', (req, res) => {
-    if (!req.session || !req.session.isAdmin) {
+    const token = req.headers['authorization'];
+    if (!token || !adminSessions[token]) {
         return res.status(401).json({ error: "Unauthorized" });
     }
     const { serial } = req.body;
@@ -74,9 +70,8 @@ app.post('/api/admin/delete', (req, res) => {
     }
 });
 
-// --- MAIN MOBILE DEVICE APP CHECK ROUTE (Pehle jaisa bilkul same) ---
+// --- MAIN MOBILE DEVICE APP CHECK ROUTE ---
 app.post('/check', (req, res) => {
-    // Front-end se direct request check logic
     const serial = req.body.serial || (req.body.data && req.body.data.serial);
     
     if (!serial) {
@@ -100,87 +95,21 @@ app.post('/check', (req, res) => {
     }
 });
 
-// --- LOGIN ROUTE (Password Check karne ke liye) ---
-app.post('/login', (req, res) => {
+// --- LOGIN API ROUTE ---
+app.post('/api/admin/login', (req, res) => {
     const { password } = req.body;
     // Yahan aap apna password change kar sakte hain (Abhi ke liye password: "admin123" rakha hai)
     if (password === 'admin123') {
-        req.session.isAdmin = true;
-        res.redirect('/panel');
+        const token = 'token_' + Math.random().toString(36).substring(2) + Date.now();
+        adminSessions[token] = true;
+        res.json({ success: true, token: token });
     } else {
-        res.send(`
-            <script>
-                alert('Galat Password!');
-                window.location.href = '/panel';
-            </script>
-        `);
+        res.status(401).json({ success: false, error: 'Galat Password!' });
     }
 });
 
-// Admin Control Panel UI route (Lock + Live Counter + Serial Management)
+// Admin Control Panel UI route
 app.get('/panel', (req, res) => {
-    // Agar login nahi hai toh pehle Login Screen dikhao
-    if (!req.session || !req.session.isAdmin) {
-        return res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Mafia Panel - Login</title>
-            <style>
-                body { font-family: sans-serif; background: #0e0b16; color: #fff; padding: 100px; text-align: center;}
-                .box { background: #1b1429; padding: 40px; border-radius: 12px; display: inline-block; border: 1px solid #3d2c5e; box-shadow: 0 0 20px rgba(163,104,255,0.2); }
-                input { display: block; margin: 15px auto; padding: 12px; width: 250px; border-radius: 6px; border: none; text-align: center; font-size: 16px;}
-                button { padding: 12px 25px; background: #a368ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px;}
-                button:hover { background: #8e4ef3; }
-            </style>
-        </head>
-        <body>
-            <div class="box">
-                <h2>🔒 Enter Server Password</h2>
-                <form action="/login" method="POST">
-                    <input type="password" name="password" placeholder="Password Dalein" required />
-                    <button type="submit">Unlock Panel</button>
-                </form>
-            </div>
-        </body>
-        </html>
-        `);
-    }
-
-    // Calculations for live counters
-    const keysArray = Object.keys(activeSerials);
-    const totalKeys = keysArray.length;
-    let activeCount = 0;
-    let deactiveCount = 0;
-
-    keysArray.forEach(k => {
-        if (activeSerials[k].active) activeCount++;
-        else deactiveCount++;
-    });
-
-    // Agar login hai toh poora Dashboard aur Management Table dikhao
-    let rowsHtml = '';
-    keysArray.forEach(serial => {
-        const item = activeSerials[serial];
-        rowsHtml += `
-            <tr>
-                <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">${serial}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">${item.days} Days</td>
-                <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">
-                    <span style="color: ${item.active ? '#4caf50' : '#f44336'}; font-weight: bold;">
-                        ${item.active ? 'ACTIVE' : 'DEACTIVE'}
-                    </span>
-                </td>
-                <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">
-                    <button onclick="toggleSerial('${serial}')" style="padding: 5px 10px; background: ${item.active ? '#ff9800' : '#4caf50'}; font-size: 12px; margin-right: 5px;">
-                        ${item.active ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button onclick="deleteSerial('${serial}')" style="padding: 5px 10px; background: #f44336; font-size: 12px;">Delete</button>
-                </td>
-            </tr>
-        `;
-    });
-
     res.send(`
     <!DOCTYPE html>
     <html>
@@ -188,9 +117,10 @@ app.get('/panel', (req, res) => {
         <title>Mafia Admin Panel</title>
         <style>
             body { font-family: sans-serif; background: #0e0b16; color: #fff; padding: 30px; text-align: center;}
-            .box { background: #1b1429; padding: 25px; border-radius: 12px; display: inline-block; border: 1px solid #3d2c5e; width: 600px; margin-bottom: 20px;}
-            input { display: block; margin: 10px auto; padding: 10px; width: 80%; border-radius: 6px; border: none; }
+            .box { background: #1b1429; padding: 25px; border-radius: 12px; display: inline-block; border: 1px solid #3d2c5e; width: 400px; margin-bottom: 20px;}
+            input { display: block; margin: 10px auto; padding: 10px; width: 80%; border-radius: 6px; border: none; font-size: 14px;}
             button { padding: 10px 20px; background: #a368ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;}
+            button:hover { background: #8e4ef3; }
             .counters { display: flex; justify-content: space-around; margin-bottom: 20px; }
             .counter-card { background: #1b1429; padding: 15px; border-radius: 8px; border: 1px solid #3d2c5e; width: 30%; }
             table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #1b1429; border-radius: 8px; overflow: hidden; }
@@ -198,52 +128,142 @@ app.get('/panel', (req, res) => {
         </style>
     </head>
     <body>
-        <h2>Mafia License Management Panel</h2>
-        
-        <!-- Live Counters Section -->
-        <div class="counters">
-            <div class="counter-card">
-                <h3>Total Serials</h3>
-                <p style="font-size: 24px; color: #a368ff; margin:0;">${totalKeys}</p>
-            </div>
-            <div class="counter-card">
-                <h3>Active</h3>
-                <p style="font-size: 24px; color: #4caf50; margin:0;">${activeCount}</p>
-            </div>
-            <div class="counter-card">
-                <h3>Deactive</h3>
-                <p style="font-size: 24px; color: #f44336; margin:0;">${deactiveCount}</p>
-            </div>
+        <!-- LOGIN SECTION -->
+        <div id="loginSection" class="box" style="margin-top: 80px; width: 320px;">
+            <h2>🔒 Enter Server Password</h2>
+            <input type="password" id="adminPassword" placeholder="Password Dalein" />
+            <button onclick="loginAdmin()">Unlock Panel</button>
+            <p id="loginMsg" style="color: #f44336; margin-top: 10px;"></p>
         </div>
 
-        <div class="box">
-            <h3>Add / Update Serial Key</h3>
-            <input type="text" id="serial" placeholder="Serial Key" />
-            <input type="number" id="days" placeholder="Days Valid" value="30" />
-            <button onclick="addSerial()">Add/Update License</button>
-            <p id="msg"></p>
-        </div>
+        <!-- DASHBOARD SECTION -->
+        <div id="dashboardSection" style="display: none;">
+            <h2>Mafia License Management Panel</h2>
+            
+            <div class="counters">
+                <div class="counter-card">
+                    <h3>Total Serials</h3>
+                    <p id="totalCount" style="font-size: 24px; color: #a368ff; margin:0;">0</p>
+                </div>
+                <div class="counter-card">
+                    <h3>Active</h3>
+                    <p id="activeCount" style="font-size: 24px; color: #4caf50; margin:0;">0</p>
+                </div>
+                <div class="counter-card">
+                    <h3>Deactive</h3>
+                    <p id="deactiveCount" style="font-size: 24px; color: #f44336; margin:0;">0</p>
+                </div>
+            </div>
 
-        <div style="width: 650px; margin: 0 auto; text-align: left;">
-            <h3>Existing Serials List</h3>
-            <table>
-                <tr>
-                    <th>Serial Key</th>
-                    <th>Days</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-                ${rowsHtml || '<tr><td colspan="4" style="text-align:center; padding: 15px;">No serials added yet.</td></tr>'}
-            </table>
+            <div class="box">
+                <h3>Add / Update Serial Key</h3>
+                <input type="text" id="serial" placeholder="Serial Key" />
+                <input type="number" id="days" placeholder="Days Valid" value="30" />
+                <button onclick="addSerial()">Add/Update License</button>
+                <p id="msg"></p>
+            </div>
+
+            <div style="width: 650px; margin: 0 auto; text-align: left;">
+                <h3>Existing Serials List</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Serial Key</th>
+                            <th>Days</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableRows">
+                        <tr><td colspan="4" style="text-align:center; padding: 15px;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <br>
+            <button onclick="logout()" style="background: #f44336; margin-top: 20px;">Logout</button>
         </div>
 
         <script>
+            const token = localStorage.getItem('mafia_admin_token');
+            if (token) {
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('dashboardSection').style.display = 'block';
+            }
+
+            async function loginAdmin() {
+                const password = document.getElementById('adminPassword').value;
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                const res = await response.json();
+                if (res.success) {
+                    localStorage.setItem('mafia_admin_token', res.token);
+                    location.reload();
+                } else {
+                    document.getElementById('loginMsg').innerText = res.error;
+                }
+            }
+
+            function logout() {
+                localStorage.removeItem('mafia_admin_token');
+                location.reload();
+            }
+
+            const rawSerials = ${JSON.stringify(activeSerials)};
+            
+            function renderPanelData() {
+                const keys = Object.keys(rawSerials);
+                document.getElementById('totalCount').innerText = keys.length;
+                
+                let active = 0;
+                let deactive = 0;
+                let html = '';
+
+                keys.forEach(serial => {
+                    const item = rawSerials[serial];
+                    if(item.active) active++; else deactive++;
+                    
+                    html += \`
+                        <tr>
+                            <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">\${serial}</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">\${item.days} Days</td>
+                            <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">
+                                <span style="color: \${item.active ? '#4caf50' : '#f44336'}; font-weight: bold;">
+                                    \${item.active ? 'ACTIVE' : 'DEACTIVE'}
+                                </span>
+                            </td>
+                            <td style="padding: 10px; border-bottom: 1px solid #3d2c5e;">
+                                <button onclick="toggleSerial('\${serial}')" style="padding: 5px 10px; background: \${item.active ? '#ff9800' : '#4caf50'}; font-size: 12px; margin-right: 5px;">
+                                    \${item.active ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button onclick="deleteSerial('\${serial}')" style="padding: 5px 10px; background: #f44336; font-size: 12px;">Delete</button>
+                            </td>
+                        </tr>
+                    \`;
+                });
+
+                document.getElementById('activeCount').innerText = active;
+                document.getElementById('deactiveCount').innerText = deactive;
+                if(keys.length > 0) {
+                    document.getElementById('tableRows').innerHTML = html;
+                } else {
+                    document.getElementById('tableRows').innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 15px;">No serials added yet.</td></tr>';
+                }
+            }
+
+            if(token) { renderPanelData(); }
+
             async function addSerial() {
                 const serial = document.getElementById('serial').value.trim();
                 const days = document.getElementById('days').value;
                 const response = await fetch('/api/admin/serial', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': localStorage.getItem('mafia_admin_token')
+                    },
                     body: JSON.stringify({ serial, days })
                 });
                 const res = await response.json();
@@ -254,7 +274,10 @@ app.get('/panel', (req, res) => {
             async function toggleSerial(serial) {
                 const response = await fetch('/api/admin/toggle', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': localStorage.getItem('mafia_admin_token')
+                    },
                     body: JSON.stringify({ serial })
                 });
                 if(response.ok) { location.reload(); }
@@ -264,7 +287,10 @@ app.get('/panel', (req, res) => {
                 if(confirm('Kya aap waqai is serial ko delete karna chahte hain?')) {
                     const response = await fetch('/api/admin/delete', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': localStorage.getItem('mafia_admin_token')
+                        },
                         body: JSON.stringify({ serial })
                     });
                     if(response.ok) { location.reload(); }
