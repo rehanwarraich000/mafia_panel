@@ -1,9 +1,8 @@
 const express = require('express');
-const cors = require('cors'); // CORS middleware ko import kiya
+const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS ko poori tarah allow kiya taaki mobile devices bina error के connect ho sakein
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST'],
@@ -13,13 +12,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// In-memory database array (Aap ise database se replace kar sakte hain)
 let activeSerials = {}; 
-
-// --- SIMPLE SESSION / TOKEN STORAGE (In-memory) ---
 let adminSessions = {};
 
-// --- ADMIN API FOR ADD/UPDATE VIA PANEL ---
 app.post('/api/admin/serial', (req, res) => {
     const token = req.headers['authorization'];
     if (!token || !adminSessions[token]) {
@@ -40,7 +35,6 @@ app.post('/api/admin/serial', (req, res) => {
     res.json({ success: true, message: `Serial ${serial} updated successfully!` });
 });
 
-// --- NEW API TO TOGGLE ACTIVE / DEACTIVE STATUS ---
 app.post('/api/admin/toggle', (req, res) => {
     const token = req.headers['authorization'];
     if (!token || !adminSessions[token]) {
@@ -55,7 +49,6 @@ app.post('/api/admin/toggle', (req, res) => {
     }
 });
 
-// --- NEW API TO DELETE SERIAL ---
 app.post('/api/admin/delete', (req, res) => {
     const token = req.headers['authorization'];
     if (!token || !adminSessions[token]) {
@@ -102,10 +95,8 @@ app.post('/check', (req, res) => {
     }
 });
 
-// --- LOGIN API ROUTE ---
 app.post('/api/admin/login', (req, res) => {
     const { password } = req.body;
-    // Yahan aap apna password change kar sakte hain (Abhi ke liye password: "admin123" rakha hai)
     if (password === 'admin123') {
         const token = 'token_' + Math.random().toString(36).substring(2) + Date.now();
         adminSessions[token] = true;
@@ -115,7 +106,6 @@ app.post('/api/admin/login', (req, res) => {
     }
 });
 
-// Admin Control Panel UI route
 app.get('/panel', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -135,7 +125,6 @@ app.get('/panel', (req, res) => {
         </style>
     </head>
     <body>
-        <!-- LOGIN SECTION -->
         <div id="loginSection" class="box" style="margin-top: 80px; width: 320px;">
             <h2>🔒 Enter Server Password</h2>
             <input type="password" id="adminPassword" placeholder="Password Dalein" />
@@ -143,7 +132,6 @@ app.get('/panel', (req, res) => {
             <p id="loginMsg" style="color: #f44336; margin-top: 10px;"></p>
         </div>
 
-        <!-- DASHBOARD SECTION -->
         <div id="dashboardSection" style="display: none;">
             <h2>Mafia License Management Panel</h2>
             
