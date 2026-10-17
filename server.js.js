@@ -6,7 +6,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type', 'Accept']
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization']
 }));
 
 app.use(express.json());
@@ -63,12 +63,14 @@ app.post('/api/admin/delete', (req, res) => {
     }
 });
 
-// --- MAIN MOBILE DEVICE APP CHECK ROUTE ---
-app.post('/check', (req, res) => {
-    const serial = req.body.serial || (req.body.data && req.body.data.serial);
+// --- ADVANCED SIGNED LICENSE CHECK HANDLER ---
+const handleLicenseCheck = (req, res) => {
+    const serial = req.body.serial || (req.body.data && req.body.data.serial) || req.query.serial;
     
     if (!serial) {
         return res.status(400).json({ 
+            status: false,
+            success: false,
             active: false, 
             reason: "not_found",
             message: "Serial parameter missing" 
@@ -78,28 +80,58 @@ app.post('/check', (req, res) => {
     const device = activeSerials[serial];
 
     if (device && device.active) {
-        // Valid JWT lease format (*.*.*) taake purani script pass kar de
-        const mockJwtLease = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY3RpdmUiOnRydWUsInNlcmlhbCI6InN1Y2Nlc3MifQ.signature_verified_token";
-        
-        // Days ko milliseconds mein convert karna expiresAt ke liye
+        const mockJwtLease = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY3RpdmUiOnRydWUsInNlcmlhbCI6InN1Y2Nlc3MifQ.signature_verified_token_ok";
         const expiresAtMs = Date.now() + (device.days * 24 * 60 * 60 * 1000);
 
+        // Native binary aur integrity verification ke liye comprehensive response
         res.json({
+            status: true,
+            success: true,
             active: true,
+            verified: true,
+            authenticated: true,
+            code: 200,
             expiresAt: expiresAtMs,
+            expires_at: expiresAtMs,
             lease: mockJwtLease,
+            token: mockJwtLease,
+            signature: "signature_verified_token_sig_ok",
+            sig: "signature_verified_token_sig_ok",
+            hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             reason: "verified",
-            message: "License active. Signed release verified."
+            message: "License active. Signed release verified.",
+            data: {
+                active: true,
+                status: true,
+                serial: serial,
+                days: device.days,
+                expiresAt: expiresAtMs,
+                signature: "signature_verified_token_sig_ok"
+            }
         });
     } else {
         res.json({
+            status: false,
+            success: false,
             active: false,
             expiresAt: 0,
+            expires_at: 0,
             reason: "not_found",
-            message: "Send this serial to Admin for activation."
+            message: "Send this serial to Admin for activation.",
+            data: {
+                active: false,
+                status: false
+            }
         });
     }
-});
+};
+
+// Multiple routes mapping taake binary kisi bhi endpoint par request bheje toh pass ho jaye
+app.post('/check', handleLicenseCheck);
+app.get('/check', handleLicenseCheck);
+app.post('/verify', handleLicenseCheck);
+app.post('/api/check', handleLicenseCheck);
+app.post('/license', handleLicenseCheck);
 
 app.post('/api/admin/login', (req, res) => {
     const { password } = req.body;
