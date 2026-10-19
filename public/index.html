@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#09090d">
+    <meta name="description" content="Mafia Anonymous module command center">
+    <title>Mafia Anonymous | Command Center</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <div id="login-screen" class="login-screen">
+      <div class="login-art" aria-hidden="true">
+        <div class="orbit orbit-one"></div>
+        <div class="orbit orbit-two"></div>
+        <div class="seal">M<span>A</span></div>
+        <div class="art-caption">CONTROL IS A QUIET THING.</div>
+      </div>
+      <div class="login-side">
+        <div class="login-brand"><span class="brand-mark">M<span>A</span></span><span>MAFIA <b>ANONYMOUS</b></span></div>
+        <div class="login-copy">
+          <p class="eyebrow">PRIVATE ACCESS <i></i></p>
+          <h1>Your command<br><em>begins here.</em></h1>
+          <p class="muted">Sign in to manage module access, schedules, and activity.</p>
+        </div>
+        <form id="login-form" class="login-form">
+          <label for="login-username">Admin username</label>
+          <input id="login-username" name="username" autocomplete="username" required maxlength="80" placeholder="Enter your username">
+          <label for="login-password">Password</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required maxlength="256" placeholder="Enter your password">
+          <div id="login-error" class="form-error" role="alert"></div>
+          <button class="button button-primary login-button" type="submit"><span>Enter command center</span><span aria-hidden="true">↗</span></button>
+        </form>
+        <p class="login-foot">RESTRICTED ACCESS <span>·</span> YOUR SESSION IS PRIVATE</p>
+      </div>
+    </div>
+
+    <div id="app-shell" class="app-shell hidden">
+      <aside class="sidebar">
+        <a class="sidebar-brand" href="#" aria-label="Mafia Anonymous home">
+          <span class="brand-mark">M<span>A</span></span>
+          <span class="brand-name">MAFIA <b>ANONYMOUS</b><small>COMMAND CENTER</small></span>
+        </a>
+        <div class="nav-label">WORKSPACE</div>
+        <nav class="side-nav" aria-label="Main navigation">
+          <a class="nav-link active" href="#overview"><span class="nav-icon">◈</span> Overview <span class="nav-indicator"></span></a>
+          <a class="nav-link" href="#modules"><span class="nav-icon">▣</span> Modules</a>
+          <a class="nav-link" href="#history"><span class="nav-icon">◷</span> Activity history</a>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="connection-card"><span class="connection-dot"></span><div><b>Panel online</b><small>Private control node</small></div></div>
+          <button id="logout-button" class="logout-button"><span>↪</span> Sign out</button>
+          <div class="sidebar-version">MA · ADMIN CONSOLE <span>V1.0</span></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumb"><span>MAFIA ANONYMOUS</span><i>/</i><b>CONTROL ROOM</b></div>
+          <div class="topbar-right"><span class="live-label"><i></i> SYSTEM LIVE</span><span class="topbar-divider"></span><span id="clock" class="clock"></span><span class="avatar">A</span><span class="admin-label">ADMINISTRATOR</span></div>
+        </header>
+
+        <section id="overview" class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow"><i></i> THE PRIVATE NETWORK</p>
+            <h1>Command<br><em>with intent.</em></h1>
+            <p>One quiet place to control your modules, set their access window, and review every change.</p>
+            <a class="button button-outline" href="#modules">Manage modules <span>↓</span></a>
+          </div>
+          <div class="hero-art" aria-label="Mafia Anonymous monogram">
+            <div class="hero-ring ring-outer"></div><div class="hero-ring ring-inner"></div>
+            <div class="hero-crosshair"></div>
+            <div class="hero-monogram">M<span>A</span></div>
+            <div class="hero-art-label">M.A. <span>EST. ANONYMOUS</span></div>
+          </div>
+          <div class="hero-index">01 <span>—</span> CONTROL</div>
+        </section>
+
+        <section class="stats-grid" aria-label="Module summary">
+          <article class="stat-card"><div class="stat-head"><span>REGISTERED MODULES</span><span class="stat-icon">▣</span></div><div id="stat-total" class="stat-value">—</div><div class="stat-foot">All connected module records</div></article>
+          <article class="stat-card"><div class="stat-head"><span>ACTIVE NOW</span><span class="stat-icon red">◉</span></div><div id="stat-active" class="stat-value">—</div><div class="stat-foot"><i class="status-dot"></i> Access currently enabled</div></article>
+          <article class="stat-card"><div class="stat-head"><span>INACTIVE</span><span class="stat-icon">◌</span></div><div id="stat-inactive" class="stat-value">—</div><div class="stat-foot">Waiting for your command</div></article>
+          <article class="stat-card"><div class="stat-head"><span>RECORDED EVENTS</span><span class="stat-icon">↗</span></div><div id="stat-events" class="stat-value">—</div><div class="stat-foot">A complete, persistent timeline</div></article>
+        </section>
+
+        <section id="modules" class="section-block">
+          <div class="section-heading">
+            <div><p class="eyebrow">ACCESS CONTROL <i></i></p><h2>Module <em>registry</em></h2><p class="section-subtitle">Choose what is active and for how long.</p></div>
+            <button id="add-module-button" class="button button-primary"><span>＋</span> Add module</button>
+          </div>
+          <div id="module-list" class="module-list"></div>
+          <div id="empty-state" class="empty-state hidden"><span class="empty-glyph">◈</span><h3>No modules in the registry</h3><p>Add a module to start scheduling access. Its module ID will be used later to connect your software.</p><button class="button button-outline" id="empty-add-button">Add your first module <span>＋</span></button></div>
+        </section>
+
+        <section id="history" class="section-block history-section">
+          <div class="section-heading history-heading">
+            <div><p class="eyebrow">THE PAPER TRAIL <i></i></p><h2>Activity <em>history</em></h2><p class="section-subtitle">Every creation, activation, renewal, expiry, and manual shutdown.</p></div>
+            <div class="history-total"><span class="history-live-dot"></span><span id="history-count">0 EVENTS</span></div>
+          </div>
+          <div class="history-table-wrap">
+            <table class="history-table">
+              <thead><tr><th>MODULE</th><th>EVENT</th><th>APPLIED</th><th>ACCESS WINDOW</th><th>RECORDED</th></tr></thead>
+              <tbody id="history-body"></tbody>
+            </table>
+            <div id="history-empty" class="table-empty hidden">Your module activity will appear here.</div>
+          </div>
+          <button id="load-more-button" class="load-more hidden">Load older events <span>↓</span></button>
+        </section>
+        <footer class="page-footer"><span>MAFIA ANONYMOUS <i>·</i> PRIVATE ADMINISTRATION</span><span>HANDLE WITH INTENT.</span></footer>
+      </main>
+    </div>
+
+    <dialog id="module-dialog" class="modal">
+      <form id="module-form" class="modal-card">
+        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
+        <p class="eyebrow">REGISTRY <i></i></p><h2>Add a <em>module.</em></h2>
+        <p class="modal-copy">Register the module now. Connecting it to your software server requires that module's integration details.</p>
+        <label for="module-name">Display name</label><input id="module-name" name="name" maxlength="80" required placeholder="e.g. Core access">
+        <label for="module-key">Module ID</label><input id="module-key" name="moduleKey" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,63}" required placeholder="e.g. core-access">
+        <p class="input-hint">Use a unique ID made of letters, numbers, dots, dashes, or underscores.</p>
+        <div id="module-error" class="form-error" role="alert"></div>
+        <button class="button button-primary modal-submit" type="submit">Add to registry <span>↗</span></button>
+      </form>
+    </dialog>
+
+    <dialog id="activation-dialog" class="modal">
+      <form id="activation-form" class="modal-card">
+        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
+        <p class="eyebrow">ACCESS SCHEDULE <i></i></p><h2>Set the <em>window.</em></h2>
+        <p id="activation-module-label" class="modal-copy"></p>
+        <label for="activation-days">Duration in days</label>
+        <input id="activation-days" name="days" type="number" min="1" max="3650" step="1" required value="30">
+        <p class="input-hint">1 to 3650 whole days. Adding time to an active module extends its current expiry.</p>
+        <div id="activation-error" class="form-error" role="alert"></div>
+        <button class="button button-primary modal-submit" type="submit">Confirm activation <span>↗</span></button>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
