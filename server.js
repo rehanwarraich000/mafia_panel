@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
-const DATA_FILE = process.env.DATA_FILE || '/tmp/licenses.json';
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data', 'licenses.json');
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 16 * 1024;
 const sessions = new Map();
