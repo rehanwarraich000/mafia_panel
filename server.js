@@ -402,6 +402,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: secureCookie ? '1h' : 0,
 }));
 
+// Yahan root route add kar diya gaya hai taake browser mein seedha index.html load ho:
 app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
