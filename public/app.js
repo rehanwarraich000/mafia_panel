@@ -6,10 +6,12 @@ const moduleList = document.querySelector('#module-list');
 const emptyState = document.querySelector('#empty-state');
 const moduleDialog = document.querySelector('#module-dialog');
 const activationDialog = document.querySelector('#activation-dialog');
+const licenseDialog = document.querySelector('#license-dialog');
 const toast = document.querySelector('#toast');
 const historyBody = document.querySelector('#history-body');
 
 let selectedModuleId = null;
+let selectedLicenseModuleId = null;
 let historyOffset = 0;
 let historyTotal = 0;
 let toastTimeout;
@@ -103,6 +105,7 @@ function renderModules(data) {
       <div class="module-actions">
         <button class="small-button" data-activate="${escapeHtml(module.id)}">${active ? '＋ Add days' : 'Activate'}</button>
         ${active ? `<button class="small-button secondary" data-deactivate="${escapeHtml(module.id)}">Deactivate</button>` : ''}
+        <button class="small-button secondary" data-licenses="${escapeHtml(module.id)}">Serial access</button>
       </div>`;
     moduleList.append(card);
   }
@@ -123,7 +126,7 @@ function renderHistory(events, append = false) {
       ? `${formatDate(event.activatedAt)} → ${formatDate(event.expiresAt)}`
       : '—';
     row.innerHTML = `
-      <td><span class="history-module">${escapeHtml(event.moduleName)}<small>${escapeHtml(event.moduleKey)}</small></span></td>
+      <td><span class="history-module">${escapeHtml(event.moduleName)}<small>${escapeHtml(event.moduleKey)}</small>${event.serialNumber ? `<small class="history-serial">${escapeHtml(event.serialNumber)}</small>` : ''}</span></td>
       <td><span class="event-badge ${escapeHtml(event.action)}">${escapeHtml(event.action)}</span></td>
       <td>${duration}</td>
       <td>${window}</td>
@@ -148,6 +151,38 @@ async function refreshDashboard() {
   } catch (error) {
     if (!appShell.classList.contains('hidden')) showToast(error.message, true);
   }
+}
+
+function renderLicenses(licenses) {
+  const list = document.querySelector('#license-list');
+  document.querySelector('#license-count').textContent = licenses.length;
+  if (licenses.length === 0) {
+    list.innerHTML = '<p class="license-empty">No serial numbers registered for this module.</p>';
+    return;
+  }
+  list.innerHTML = licenses.map((license) => {
+    const status = license.status.toUpperCase();
+    const active = license.status === 'active';
+    const paused = license.status === 'paused';
+    const expiry = license.expiresAt
+      ? `${paused ? 'Paused · held expiry ' : 'Expires '}${formatDate(license.expiresAt, true)}`
+      : `Registered ${formatDate(license.createdAt)}`;
+    const actions = active
+      ? `<button class="small-button secondary" data-license-action="pause" data-license-id="${escapeHtml(license.id)}">Pause</button><button class="small-button secondary" data-license-action="deactivate" data-license-id="${escapeHtml(license.id)}">Deactivate</button>`
+      : paused
+        ? `<button class="small-button" data-license-action="resume" data-license-id="${escapeHtml(license.id)}">Resume</button><button class="small-button secondary" data-license-action="deactivate" data-license-id="${escapeHtml(license.id)}">Deactivate</button>`
+        : `<button class="small-button" data-license-activate="${escapeHtml(license.serialNumber)}">Activate</button>`;
+    return `<article class="license-row">
+      <div class="license-identity"><strong>${escapeHtml(license.serialNumber)}</strong><small>${escapeHtml(expiry)}</small></div>
+      <span class="license-status ${escapeHtml(license.status)}"><i></i>${status}</span>
+      <div class="license-actions">${actions}</div>
+    </article>`;
+  }).join('');
+}
+
+async function loadLicenses() {
+  const result = await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses`);
+  renderLicenses(result.licenses);
 }
 
 function updateClock() {
@@ -221,6 +256,23 @@ document.querySelector('#module-form').addEventListener('submit', async (event) 
 });
 
 moduleList.addEventListener('click', async (event) => {
+  const licensesButton = event.target.closest('[data-licenses]');
+  if (licensesButton) {
+    selectedLicenseModuleId = licensesButton.dataset.licenses;
+    const card = licensesButton.closest('.module-card');
+    document.querySelector('#license-module-label').textContent =
+      `Manage serial-number access for ${card.querySelector('.module-name').textContent}.`;
+    document.querySelector('#license-error').textContent = '';
+    document.querySelector('#license-form').reset();
+    licenseDialog.showModal();
+    try {
+      await loadLicenses();
+    } catch (error) {
+      showToast(error.message, true);
+      licenseDialog.close();
+    }
+    return;
+  }
   const activateButton = event.target.closest('[data-activate]');
   if (activateButton) {
     selectedModuleId = activateButton.dataset.activate;
@@ -244,6 +296,72 @@ moduleList.addEventListener('click', async (event) => {
   } catch (error) {
     showToast(error.message, true);
     deactivateButton.disabled = false;
+  }
+});
+
+document.querySelector('#license-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const serialNumber = data.get('serialNumber');
+  const action = event.submitter?.value;
+  const days = Number(data.get('days'));
+  const error = document.querySelector('#license-error');
+  const buttons = [...form.querySelectorAll('button[type="submit"]')];
+  error.textContent = '';
+  if (action === 'activate' && (!Number.isInteger(days) || days < 1 || days > 3650)) {
+    error.textContent = 'Enter a whole number of activation days from 1 to 3650.';
+    return;
+  }
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    if (action === 'register') {
+      await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses`, {
+        method: 'POST',
+        body: JSON.stringify({ serialNumber }),
+      });
+      showToast('Serial number registered as inactive.');
+    } else {
+      await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses/activate`, {
+        method: 'POST',
+        body: JSON.stringify({ serialNumber, days }),
+      });
+      showToast(`Serial activated for ${days} day${days === 1 ? '' : 's'}.`);
+    }
+    form.reset();
+    await loadLicenses();
+    await refreshDashboard();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+});
+
+document.querySelector('#license-list').addEventListener('click', async (event) => {
+  const actionButton = event.target.closest('[data-license-action]');
+  const activateButton = event.target.closest('[data-license-activate]');
+  if (!actionButton && !activateButton) return;
+  const button = actionButton || activateButton;
+  if (activateButton) {
+    document.querySelector('#license-serial').value = activateButton.dataset.licenseActivate;
+    document.querySelector('#license-days').focus();
+    return;
+  }
+  button.disabled = true;
+  try {
+    const endpointAction = actionButton.dataset.licenseAction;
+    await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses/${encodeURIComponent(actionButton.dataset.licenseId)}/${endpointAction}`, {
+      method: 'POST',
+      body: '{}',
+    });
+    const actionLabels = { pause: 'paused', resume: 'resumed', deactivate: 'deactivated' };
+    showToast(`Serial ${actionLabels[endpointAction]}.`);
+    await loadLicenses();
+    await refreshDashboard();
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
   }
 });
 

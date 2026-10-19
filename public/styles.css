@@ -129,7 +129,7 @@ input:focus { border-color: #a74746; box-shadow: 0 0 0 3px #d44c4c17; }
 .section-subtitle { margin: 0; color: #827c84; font-size: 10px; }
 .section-heading > .button { min-height: 37px; margin-bottom: 2px; font-size: 10px; }
 .module-list { display: grid; gap: 9px; }
-.module-card { display: grid; grid-template-columns: minmax(130px, 1.1fr) minmax(100px, .75fr) minmax(145px, 1fr) minmax(140px, .8fr) auto; align-items: center; gap: 15px; min-height: 76px; padding: 14px 17px; border: 1px solid #29272d; background: linear-gradient(105deg, #141317, #101014); }
+.module-card { display: grid; grid-template-columns: minmax(130px, 1.1fr) minmax(100px, .75fr) minmax(145px, 1fr) minmax(220px, 1.2fr); align-items: center; gap: 15px; min-height: 76px; padding: 14px 17px; border: 1px solid #29272d; background: linear-gradient(105deg, #141317, #101014); }
 .module-name-wrap { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .module-glyph { flex: 0 0 34px; height: 34px; display: grid; place-items: center; border: 1px solid #3c3034; color: #d06a62; font: 15px Georgia, serif; }
 .module-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e4ded9; font-size: 11px; }
@@ -141,7 +141,7 @@ input:focus { border-color: #a74746; box-shadow: 0 0 0 3px #d44c4c17; }
 .module-expiry { display: flex; flex-direction: column; gap: 5px; color: #d3ccc7; font-size: 9px; }
 .module-expiry small { color: #77717a; font-size: 8px; }
 .module-expiry.expired { color: #b3a0a0; }
-.module-actions { display: flex; justify-content: end; gap: 7px; }
+.module-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 7px; }
 .small-button { min-height: 30px; padding: 0 10px; border: 1px solid #433337; background: #1b1418; color: #e7aaa3; cursor: pointer; font-size: 9px; transition: .2s; }
 .small-button:hover { border-color: #bd5552; background: #2a171a; }
 .small-button.secondary { border-color: #333037; background: transparent; color: #aaa3a9; }
@@ -166,6 +166,9 @@ input:focus { border-color: #a74746; box-shadow: 0 0 0 3px #d44c4c17; }
 .event-badge.activated { color: #e4a19b; border-color: #603536; background: #28191b; }
 .event-badge.expired { color: #c8a477; border-color: #514333; }
 .event-badge.created { color: #a7bda2; border-color: #354431; }
+.event-badge.paused { color: #c8a477; border-color: #514333; }
+.event-badge.resumed, .event-badge.serial_added { color: #a7bda2; border-color: #354431; }
+.history-module .history-serial { color: #c28c84; }
 .table-empty { padding: 27px; color: #827c84; text-align: center; font-size: 10px; }
 .load-more { display: block; margin: 14px auto 0; padding: 9px 13px; border: 1px solid #343039; background: transparent; color: #b7afb3; cursor: pointer; font-size: 9px; }
 .load-more:hover { border-color: #8e4d4d; color: #fff; }
@@ -173,6 +176,8 @@ input:focus { border-color: #a74746; box-shadow: 0 0 0 3px #d44c4c17; }
 .page-footer i { color: #aa514d; font-style: normal; }
 
 .modal { width: min(440px, calc(100% - 30px)); max-height: calc(100% - 30px); padding: 0; border: 1px solid #393038; background: #111014; color: var(--text); box-shadow: 0 20px 100px #000b; }
+.license-modal { width: min(760px, calc(100% - 30px)); }
+.license-modal .modal-card { max-height: calc(100vh - 30px); overflow-y: auto; }
 .modal::backdrop { background: #050507d9; backdrop-filter: blur(5px); }
 .modal-card { position: relative; padding: 31px; }
 .modal-close { position: absolute; top: 15px; right: 17px; border: 0; background: none; color: #908991; cursor: pointer; font-size: 22px; }
@@ -183,6 +188,28 @@ input:focus { border-color: #a74746; box-shadow: 0 0 0 3px #d44c4c17; }
 .modal-card input { height: 41px; }
 .input-hint { margin: 7px 0 0; color: #706b72; font-size: 9px; line-height: 1.6; }
 .modal-submit { justify-content: space-between; margin-top: 13px; }
+.license-form { display: grid; grid-template-columns: minmax(0, 1fr) 210px; align-items: end; gap: 0 15px; padding: 0 0 18px; border-bottom: 1px solid #29272d; }
+.license-form > label, .license-duration label { display: block; }
+.license-form > input, .license-form > .form-error, .license-form-actions { grid-column: 1 / -1; }
+.license-duration .input-hint { margin-bottom: 2px; }
+.license-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.license-form-actions .button { min-height: 36px; font-size: 9px; }
+.license-list-heading { display: flex; align-items: center; gap: 9px; margin: 19px 0 10px; }
+.license-list-heading h3 { margin: 0; font: 19px Georgia, serif; }
+.license-list-heading > span { color: #a59ba2; font-size: 9px; }
+.license-list { display: grid; gap: 7px; }
+.license-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 11px 12px; border: 1px solid #29272d; background: #141317; }
+.license-identity { min-width: 0; }
+.license-identity strong { display: block; overflow-wrap: anywhere; color: #e7dfd9; font: 10px Consolas, monospace; }
+.license-identity small { display: block; margin-top: 5px; color: #77717a; font-size: 8px; }
+.license-status { display: inline-flex; align-items: center; gap: 6px; color: #aaa3aa; font-size: 8px; }
+.license-status i { width: 5px; height: 5px; border-radius: 50%; background: #817a80; }
+.license-status.active { color: #a6c5a0; }
+.license-status.active i { background: #82ae80; }
+.license-status.paused { color: #c8a477; }
+.license-status.paused i { background: #c8a477; }
+.license-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.license-empty { margin: 0; padding: 18px; border: 1px dashed #39333a; color: #827c84; text-align: center; font-size: 9px; }
 .toast { position: fixed; z-index: 30; right: 22px; bottom: 22px; max-width: min(390px, calc(100vw - 44px)); padding: 12px 16px; border: 1px solid #4f373b; background: #1a1418; color: #e7deda; box-shadow: 0 9px 40px #0009; opacity: 0; transform: translateY(10px); pointer-events: none; transition: .25s; font-size: 10px; }
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.error { border-color: #8f3939; color: #f0aaa4; }
@@ -195,6 +222,16 @@ input:focus { border-color: #a74746; box-shadow: 0 0 0 3px #d44c4c17; }
   .module-expiry { grid-column: 1 / 3; grid-row: 2; flex-direction: row; align-items: center; }
   .module-actions { grid-column: 3 / 5; grid-row: 2; }
   .hero-art { margin-right: 0; transform: scale(.83); }
+}
+@media (max-width: 620px) {
+  .license-modal .modal-card { padding: 25px 18px; }
+  .license-form { grid-template-columns: minmax(0, 1fr); }
+  .license-duration, .license-form > label, .license-form > input, .license-form > .form-error, .license-form-actions { grid-column: 1; }
+  .license-duration { margin-top: 2px; }
+  .license-form-actions { flex-direction: column; }
+  .license-row { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+  .license-actions { grid-column: 1 / -1; justify-content: stretch; }
+  .license-actions .small-button { flex: 1; }
 }
 @media (max-width: 700px) {
   .login-screen { grid-template-columns: 1fr; }

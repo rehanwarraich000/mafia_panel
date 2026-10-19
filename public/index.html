@@ -101,7 +101,7 @@
           </div>
           <div class="history-table-wrap">
             <table class="history-table">
-              <thead><tr><th>MODULE</th><th>EVENT</th><th>APPLIED</th><th>ACCESS WINDOW</th><th>RECORDED</th></tr></thead>
+              <thead><tr><th>MODULE / SERIAL</th><th>EVENT</th><th>APPLIED</th><th>ACCESS WINDOW</th><th>RECORDED</th></tr></thead>
               <tbody id="history-body"></tbody>
             </table>
             <div id="history-empty" class="table-empty hidden">Your module activity will appear here.</div>
@@ -136,6 +136,29 @@
         <div id="activation-error" class="form-error" role="alert"></div>
         <button class="button button-primary modal-submit" type="submit">Confirm activation <span>↗</span></button>
       </form>
+    </dialog>
+
+    <dialog id="license-dialog" class="modal license-modal">
+      <div class="modal-card">
+        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
+        <p class="eyebrow">SERIAL ACCESS <i></i></p><h2>Device <em>licenses.</em></h2>
+        <p id="license-module-label" class="modal-copy"></p>
+        <form id="license-form" class="license-form">
+          <label for="license-serial">Device serial number</label>
+          <input id="license-serial" name="serialNumber" maxlength="128" required autocomplete="off" placeholder="Enter the customer's serial number">
+          <div class="license-duration">
+            <div><label for="license-days">Activation duration (days)</label><input id="license-days" name="days" type="number" min="1" max="3650" step="1" value="30"></div>
+            <p class="input-hint">Leave duration optional when registering a serial without activating it.</p>
+          </div>
+          <div id="license-error" class="form-error" role="alert"></div>
+          <div class="license-form-actions">
+            <button class="button button-outline" type="submit" name="action" value="register">Register inactive</button>
+            <button class="button button-primary" type="submit" name="action" value="activate">Activate / add days <span>↗</span></button>
+          </div>
+        </form>
+        <div class="license-list-heading"><h3>Registered serials</h3><span id="license-count">0</span></div>
+        <div id="license-list" class="license-list"></div>
+      </div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

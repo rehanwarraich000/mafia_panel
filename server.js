@@ -64,6 +64,33 @@ db.exec(`
     occurred_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS module_licenses (
+    id TEXT PRIMARY KEY,
+    module_id TEXT NOT NULL REFERENCES modules(id),
+    serial_number TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('active', 'paused', 'inactive')),
+    activated_at TEXT,
+    expires_at TEXT,
+    current_duration_days INTEGER,
+    paused_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (module_id, serial_number)
+  );
+
+  CREATE TABLE IF NOT EXISTS license_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    license_id TEXT NOT NULL REFERENCES module_licenses(id),
+    module_key TEXT NOT NULL,
+    module_name TEXT NOT NULL,
+    serial_number TEXT NOT NULL,
+    action TEXT NOT NULL,
+    duration_days INTEGER,
+    activated_at TEXT,
+    expires_at TEXT,
+    occurred_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS admin_sessions (
     session_id TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL
@@ -73,6 +100,10 @@ db.exec(`
     ON module_events(occurred_at DESC, id DESC);
   CREATE INDEX IF NOT EXISTS module_events_module_id_idx
     ON module_events(module_id, id DESC);
+  CREATE INDEX IF NOT EXISTS module_licenses_module_id_idx
+    ON module_licenses(module_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS license_events_occurred_at_idx
+    ON license_events(occurred_at DESC, id DESC);
   CREATE INDEX IF NOT EXISTS admin_sessions_expires_at_idx
     ON admin_sessions(expires_at);
 `);
@@ -110,6 +141,14 @@ const loginLimiter = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: 'Too many login attempts. Try again in 15 minutes.' },
+});
+
+const accessCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many access checks. Try again later.' },
 });
 
 function readCookie(req, name) {
@@ -227,12 +266,102 @@ function cleanExpiredModules() {
   expire(expired);
 }
 
+function cleanExpiredLicenses() {
+  const now = new Date().toISOString();
+  const expired = db.prepare(`
+    SELECT license.id, license.serial_number, license.current_duration_days,
+      license.activated_at, license.expires_at, module.module_key, module.name
+    FROM module_licenses AS license
+    JOIN modules AS module ON module.id = license.module_id
+    WHERE license.status = 'active' AND license.expires_at <= ?
+  `).all(now);
+
+  const expire = db.transaction((rows) => {
+    for (const license of rows) {
+      db.prepare(`
+        UPDATE module_licenses
+        SET status = 'inactive', activated_at = NULL, expires_at = NULL,
+          current_duration_days = NULL, paused_at = NULL, updated_at = ?
+        WHERE id = ?
+      `).run(now, license.id);
+      db.prepare(`
+        INSERT INTO license_events
+          (license_id, module_key, module_name, serial_number, action, duration_days,
+            activated_at, expires_at, occurred_at)
+        VALUES (?, ?, ?, ?, 'expired', ?, ?, ?, ?)
+      `).run(
+        license.id,
+        license.module_key,
+        license.name,
+        license.serial_number,
+        license.current_duration_days,
+        license.activated_at,
+        license.expires_at,
+        license.expires_at,
+      );
+    }
+  });
+  expire(expired);
+}
+
 function validModuleId(value) {
   return typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value);
 }
 
+function normalizeSerial(value) {
+  if (typeof value !== 'string') return null;
+  const serial = value.trim().toUpperCase();
+  if (!serial || serial.length > 128 || /[\u0000-\u001f\u007f]/.test(serial)) return null;
+  return serial;
+}
+
+function validLicenseId(value) {
+  return typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value);
+}
+
+function recordLicenseEvent(license, action, occurredAt, durationDays = null, activatedAt = null, expiresAt = null) {
+  db.prepare(`
+    INSERT INTO license_events
+      (license_id, module_key, module_name, serial_number, action, duration_days,
+        activated_at, expires_at, occurred_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    license.id,
+    license.module_key,
+    license.name,
+    license.serial_number,
+    action,
+    durationDays,
+    activatedAt,
+    expiresAt,
+    occurredAt,
+  );
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.post('/api/access/check', accessCheckLimiter, (req, res) => {
+  const moduleKey = typeof req.body?.moduleKey === 'string' ? req.body.moduleKey.trim() : '';
+  const serialNumber = normalizeSerial(req.body?.serialNumber);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(moduleKey) || !serialNumber) {
+    return res.status(400).json({ error: 'A valid module ID and serial number are required.' });
+  }
+  cleanExpiredLicenses();
+  const license = db.prepare(`
+    SELECT license.status, license.expires_at
+    FROM module_licenses AS license
+    JOIN modules AS module ON module.id = license.module_id
+    WHERE module.module_key = ? AND license.serial_number = ?
+  `).get(moduleKey, serialNumber);
+  const allowed = Boolean(license && license.status === 'active'
+    && license.expires_at && license.expires_at > new Date().toISOString());
+  res.json({
+    allowed,
+    status: allowed ? 'active' : (license?.status || 'not_found'),
+    expiresAt: allowed ? license.expires_at : null,
+  });
 });
 
 app.post('/api/login', requireSameOrigin, loginLimiter, (req, res) => {
@@ -376,21 +505,233 @@ app.post('/api/modules/:id/deactivate', requireSameOrigin, requireAuth, (req, re
   res.json({ id: module.id, enabled: false, deactivatedAt: now });
 });
 
+app.get('/api/modules/:id/licenses', requireAuth, (req, res) => {
+  if (!validModuleId(req.params.id)) return res.status(400).json({ error: 'Invalid module ID.' });
+  cleanExpiredLicenses();
+  const module = db.prepare('SELECT id FROM modules WHERE id = ?').get(req.params.id);
+  if (!module) return res.status(404).json({ error: 'Module not found.' });
+  const licenses = db.prepare(`
+    SELECT id, serial_number AS serialNumber, status, activated_at AS activatedAt,
+      expires_at AS expiresAt, current_duration_days AS currentDurationDays,
+      created_at AS createdAt, updated_at AS updatedAt
+    FROM module_licenses
+    WHERE module_id = ?
+    ORDER BY created_at DESC
+  `).all(req.params.id);
+  res.json({ licenses });
+});
+
+app.post('/api/modules/:id/licenses', requireSameOrigin, requireAuth, (req, res) => {
+  if (!validModuleId(req.params.id)) return res.status(400).json({ error: 'Invalid module ID.' });
+  const serialNumber = normalizeSerial(req.body?.serialNumber);
+  if (!serialNumber) {
+    return res.status(400).json({ error: 'Serial number is required and must be 128 characters or fewer.' });
+  }
+  const module = db.prepare('SELECT id, module_key, name FROM modules WHERE id = ?').get(req.params.id);
+  if (!module) return res.status(404).json({ error: 'Module not found.' });
+  const now = new Date().toISOString();
+  const license = { ...module, id: crypto.randomUUID(), serial_number: serialNumber };
+  const register = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO module_licenses
+        (id, module_id, serial_number, status, created_at, updated_at)
+      VALUES (?, ?, ?, 'inactive', ?, ?)
+    `).run(license.id, module.id, serialNumber, now, now);
+    recordLicenseEvent(license, 'serial_added', now);
+  });
+  try {
+    register();
+  } catch (error) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(409).json({ error: 'That serial number is already registered for this module.' });
+    }
+    throw error;
+  }
+  res.status(201).json({
+    id: license.id,
+    serialNumber,
+    status: 'inactive',
+    createdAt: now,
+  });
+});
+
+app.post('/api/modules/:id/licenses/activate', requireSameOrigin, requireAuth, (req, res) => {
+  if (!validModuleId(req.params.id)) return res.status(400).json({ error: 'Invalid module ID.' });
+  const serialNumber = normalizeSerial(req.body?.serialNumber);
+  const days = req.body?.days;
+  if (!serialNumber) {
+    return res.status(400).json({ error: 'Serial number is required and must be 128 characters or fewer.' });
+  }
+  if (!Number.isSafeInteger(days) || days < 1 || days > 3650) {
+    return res.status(400).json({ error: 'Activation duration must be a whole number from 1 to 3650 days.' });
+  }
+  cleanExpiredLicenses();
+  const module = db.prepare('SELECT id, module_key, name FROM modules WHERE id = ?').get(req.params.id);
+  if (!module) return res.status(404).json({ error: 'Module not found.' });
+  let license = db.prepare(`
+    SELECT id, module_id, serial_number, status, activated_at, expires_at, current_duration_days, paused_at
+    FROM module_licenses WHERE module_id = ? AND serial_number = ?
+  `).get(module.id, serialNumber);
+  if (license?.status === 'paused') {
+    return res.status(409).json({ error: 'This serial is paused. Resume it before adding activation days.' });
+  }
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const isActive = license?.status === 'active' && license.expires_at > nowIso;
+  const activatedAt = isActive ? license.activated_at : nowIso;
+  const baseTime = isActive ? new Date(license.expires_at) : now;
+  const expiresAt = new Date(baseTime.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+  const licenseId = license?.id || crypto.randomUUID();
+  const activation = db.transaction(() => {
+    if (!license) {
+      db.prepare(`
+        INSERT INTO module_licenses
+          (id, module_id, serial_number, status, activated_at, expires_at,
+            current_duration_days, created_at, updated_at)
+        VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?)
+      `).run(licenseId, module.id, serialNumber, nowIso, expiresAt, days, nowIso, nowIso);
+      license = {
+        id: licenseId,
+        module_id: module.id,
+        serial_number: serialNumber,
+        status: 'active',
+        activated_at: activatedAt,
+        expires_at: expiresAt,
+        current_duration_days: days,
+      };
+    } else {
+      db.prepare(`
+        UPDATE module_licenses
+        SET status = 'active', activated_at = ?, expires_at = ?,
+          current_duration_days = ?, paused_at = NULL, updated_at = ?
+        WHERE id = ?
+      `).run(
+        activatedAt,
+        expiresAt,
+        (isActive ? (license.current_duration_days || 0) : 0) + days,
+        nowIso,
+        license.id,
+      );
+      license.status = 'active';
+      license.activated_at = activatedAt;
+      license.expires_at = expiresAt;
+    }
+    recordLicenseEvent({ ...module, ...license, serial_number: serialNumber }, 'activated', nowIso, days, nowIso, expiresAt);
+  });
+  activation();
+  res.json({ id: licenseId, serialNumber, status: 'active', activatedAt, expiresAt, daysAdded: days });
+});
+
+app.post('/api/modules/:id/licenses/:licenseId/pause', requireSameOrigin, requireAuth, (req, res) => {
+  if (!validModuleId(req.params.id) || !validLicenseId(req.params.licenseId)) {
+    return res.status(400).json({ error: 'Invalid module or serial record ID.' });
+  }
+  cleanExpiredLicenses();
+  const license = db.prepare(`
+    SELECT license.*, module.module_key, module.name
+    FROM module_licenses AS license
+    JOIN modules AS module ON module.id = license.module_id
+    WHERE license.id = ? AND license.module_id = ?
+  `).get(req.params.licenseId, req.params.id);
+  if (!license) return res.status(404).json({ error: 'Serial number not found for this module.' });
+  if (license.status !== 'active') return res.status(409).json({ error: 'Only an active serial can be paused.' });
+
+  const now = new Date().toISOString();
+  const pause = db.transaction(() => {
+    db.prepare(`
+      UPDATE module_licenses SET status = 'paused', paused_at = ?, updated_at = ? WHERE id = ?
+    `).run(now, now, license.id);
+    recordLicenseEvent(license, 'paused', now, license.current_duration_days, license.activated_at, license.expires_at);
+  });
+  pause();
+  res.json({ id: license.id, status: 'paused', pausedAt: now, expiresAt: license.expires_at });
+});
+
+app.post('/api/modules/:id/licenses/:licenseId/resume', requireSameOrigin, requireAuth, (req, res) => {
+  if (!validModuleId(req.params.id) || !validLicenseId(req.params.licenseId)) {
+    return res.status(400).json({ error: 'Invalid module or serial record ID.' });
+  }
+  const license = db.prepare(`
+    SELECT license.*, module.module_key, module.name
+    FROM module_licenses AS license
+    JOIN modules AS module ON module.id = license.module_id
+    WHERE license.id = ? AND license.module_id = ?
+  `).get(req.params.licenseId, req.params.id);
+  if (!license) return res.status(404).json({ error: 'Serial number not found for this module.' });
+  if (license.status !== 'paused' || !license.paused_at || !license.expires_at) {
+    return res.status(409).json({ error: 'Only a paused serial can be resumed.' });
+  }
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const expiresAt = new Date(
+    new Date(license.expires_at).getTime() - new Date(license.paused_at).getTime() + now.getTime(),
+  ).toISOString();
+  const resume = db.transaction(() => {
+    db.prepare(`
+      UPDATE module_licenses SET status = 'active', expires_at = ?, paused_at = NULL, updated_at = ?
+      WHERE id = ?
+    `).run(expiresAt, nowIso, license.id);
+    recordLicenseEvent(license, 'resumed', nowIso, license.current_duration_days, license.activated_at, expiresAt);
+  });
+  resume();
+  res.json({ id: license.id, status: 'active', expiresAt });
+});
+
+app.post('/api/modules/:id/licenses/:licenseId/deactivate', requireSameOrigin, requireAuth, (req, res) => {
+  if (!validModuleId(req.params.id) || !validLicenseId(req.params.licenseId)) {
+    return res.status(400).json({ error: 'Invalid module or serial record ID.' });
+  }
+  cleanExpiredLicenses();
+  const license = db.prepare(`
+    SELECT license.*, module.module_key, module.name
+    FROM module_licenses AS license
+    JOIN modules AS module ON module.id = license.module_id
+    WHERE license.id = ? AND license.module_id = ?
+  `).get(req.params.licenseId, req.params.id);
+  if (!license) return res.status(404).json({ error: 'Serial number not found for this module.' });
+  if (license.status === 'inactive') return res.status(409).json({ error: 'This serial is already inactive.' });
+
+  const now = new Date().toISOString();
+  const deactivate = db.transaction(() => {
+    db.prepare(`
+      UPDATE module_licenses
+      SET status = 'inactive', activated_at = NULL, expires_at = NULL,
+        current_duration_days = NULL, paused_at = NULL, updated_at = ?
+      WHERE id = ?
+    `).run(now, license.id);
+    recordLicenseEvent(license, 'deactivated', now, license.current_duration_days, license.activated_at, license.expires_at);
+  });
+  deactivate();
+  res.json({ id: license.id, status: 'inactive', deactivatedAt: now });
+});
+
 app.get('/api/history', requireAuth, (req, res) => {
   cleanExpiredModules();
+  cleanExpiredLicenses();
   const limit = Number(req.query.limit ?? 50);
   const offset = Number(req.query.offset ?? 0);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100
     || !Number.isInteger(offset) || offset < 0) {
     return res.status(400).json({ error: 'History limit must be 1-100 and offset must be zero or greater.' });
   }
-  const total = db.prepare('SELECT COUNT(*) AS total FROM module_events').get().total;
+  const total = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM module_events) +
+      (SELECT COUNT(*) FROM license_events) AS total
+  `).get().total;
   const events = db.prepare(`
     SELECT id, module_key AS moduleKey, module_name AS moduleName, action,
       duration_days AS durationDays, activated_at AS activatedAt, expires_at AS expiresAt,
-      occurred_at AS occurredAt
+      occurred_at AS occurredAt, NULL AS serialNumber, 0 AS eventType
     FROM module_events
-    ORDER BY occurred_at DESC, id DESC
+    UNION ALL
+    SELECT id, module_key AS moduleKey, module_name AS moduleName, action,
+      duration_days AS durationDays, activated_at AS activatedAt, expires_at AS expiresAt,
+      occurred_at AS occurredAt, serial_number AS serialNumber, 1 AS eventType
+    FROM license_events
+    ORDER BY occurredAt DESC, eventType DESC, id DESC
     LIMIT ? OFFSET ?
   `).all(limit, offset);
   res.json({ events, total, limit, offset });

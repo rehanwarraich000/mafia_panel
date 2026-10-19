@@ -36,17 +36,30 @@ All of these setup actions are in GitHub/Coolify's web pages. You are not connec
 
 Module records and event history are stored in SQLite on the Coolify volume at `/app/data/panel.sqlite`. Keep that volume when redeploying, arrange regular backups through your server/Coolify backup options, and test restoring a backup before relying on it.
 
-## Important: connecting your real module is a later step
+## Connect a module, app, or GPS service
 
-The current panel manages module access **in its own database only**. It is not yet connected to your Android module or another app/server. When you are ready, provide the module's API shape and authentication requirements (do not send real tokens/passwords). The integration can be added within this **same project folder**: the server-side module actions/API are in `server.js`, and the browser interface is in `public/index.html` and `public/app.js`. We will change only the relevant integration files and update this guide; you do not need to root the device or modify unrelated module files just to use the panel.
+The panel now keeps a separate license for each module/serial-number pair. In **Serial access**, register a serial without activating it, activate it for 1–3650 days, add time to an active license, pause it, resume it, or deactivate it. Pausing freezes the remaining access time; the expiry moves forward by the duration of the pause when resumed. All serial changes and status transitions are included in the persistent activity history.
+
+To enforce access, the app or service that protects the module must call the panel's server-side check endpoint when it starts or performs a protected action:
+
+```http
+POST /api/access/check
+Content-Type: application/json
+
+{ "moduleKey": "core-access", "serialNumber": "CUSTOMER-SERIAL-001" }
+```
+
+An active license returns `{ "allowed": true, "status": "active", "expiresAt": "..." }`. An inactive, paused, expired, or unknown serial returns `allowed: false`. Requests are rate-limited. Call this endpoint from a trusted app backend/service where possible; do not put the admin password or session secret in a mobile app. A panel entry alone cannot change an already-installed app's interface or enforce licensing: that app must be wired to check the endpoint and hide/disable the protected functionality when access is denied. No phone rooting is required.
+
+Future modules use the same integration contract: register the module once in the panel, use its unique module ID as `moduleKey`, then have its backend submit the installed serial to `/api/access/check`. Admin-only serial management and license-list endpoints require the signed panel session; the check endpoint returns only the access result and expiry.
 
 ## Use the panel
 
 1. Select **Add module**, and enter a display name and unique module ID.
-2. Choose **Activate**, enter a whole number of days (1–3650), and confirm.
-3. If you add days while a module is already active, those days extend its existing expiry.
-4. Choose **Deactivate** to turn access off immediately.
-5. The activity history records creation, each activation/renewal, manual deactivation, and expiry. Select **Load older events** to page through the complete history.
+2. Open **Serial access** on the module, enter a device serial number, then choose **Register inactive** or **Activate / add days**.
+3. Activation duration is a whole number of days from 1–3650. Adding days to an active serial extends its expiry.
+4. Use **Pause**, **Resume**, or **Deactivate** beside a serial to manage its access.
+5. The activity history records module and serial creation, activation/renewal, pause/resume, deactivation, and expiry. Select **Load older events** to page through the complete history.
 
 Activation expiry is checked when the panel reads or changes module data. It does not require a continuously running background scheduler.
 
@@ -58,7 +71,12 @@ All management endpoints require the signed admin session cookie and same-origin
 - `GET /api/modules`, `POST /api/modules`
 - `POST /api/modules/:id/activate` with `{ "days": 30 }`
 - `POST /api/modules/:id/deactivate`
+- `GET /api/modules/:id/licenses`
+- `POST /api/modules/:id/licenses` with `{ "serialNumber": "CUSTOMER-SERIAL-001" }` (register inactive)
+- `POST /api/modules/:id/licenses/activate` with `{ "serialNumber": "CUSTOMER-SERIAL-001", "days": 30 }`
+- `POST /api/modules/:id/licenses/:licenseId/pause`, `/resume`, or `/deactivate`
+- `POST /api/access/check` with `{ "moduleKey": "core-access", "serialNumber": "CUSTOMER-SERIAL-001" }` (public, rate-limited access check)
 - `GET /api/history?limit=50&offset=0`
 - `GET /api/health` (public health check)
 
-The database and API keep the full event history; the dashboard loads it in pages of 50.
+The database and API keep the full module and serial-license event history; the dashboard loads it in pages of 50. Module-wide activation endpoints remain available for existing integrations; serial-license status is managed independently through the license endpoints.
