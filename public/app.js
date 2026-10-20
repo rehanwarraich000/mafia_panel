@@ -6,12 +6,11 @@ const moduleList = document.querySelector('#module-list');
 const emptyState = document.querySelector('#empty-state');
 const moduleDialog = document.querySelector('#module-dialog');
 const activationDialog = document.querySelector('#activation-dialog');
-const licenseDialog = document.querySelector('#license-dialog');
 const toast = document.querySelector('#toast');
 const historyBody = document.querySelector('#history-body');
+const licenseModuleSelect = document.querySelector('#license-module');
 
 let selectedModuleId = null;
-let selectedLicenseModuleId = null;
 let historyOffset = 0;
 let historyTotal = 0;
 let toastTimeout;
@@ -87,6 +86,23 @@ function renderModules(data) {
   document.querySelector('#stat-inactive').textContent = data.summary.inactive;
   moduleList.replaceChildren();
   emptyState.classList.toggle('hidden', data.modules.length > 0);
+  const previousModuleId = licenseModuleSelect.value;
+  licenseModuleSelect.replaceChildren();
+  if (data.modules.length === 0) {
+    licenseModuleSelect.add(new Option('Add a module first', ''));
+    licenseModuleSelect.disabled = true;
+    renderLicenses([]);
+    document.querySelector('#license-list').innerHTML =
+      '<p class="license-empty">Add a module before registering serial numbers.</p>';
+  } else {
+    for (const module of data.modules) {
+      licenseModuleSelect.add(new Option(`${module.name} · ${module.moduleKey}`, module.id));
+    }
+    licenseModuleSelect.disabled = false;
+    licenseModuleSelect.value = data.modules.some((module) => module.id === previousModuleId)
+      ? previousModuleId
+      : data.modules[0].id;
+  }
 
   for (const module of data.modules) {
     const card = document.createElement('article');
@@ -105,7 +121,7 @@ function renderModules(data) {
       <div class="module-actions">
         <button class="small-button" data-activate="${escapeHtml(module.id)}">${active ? '＋ Add days' : 'Activate'}</button>
         ${active ? `<button class="small-button secondary" data-deactivate="${escapeHtml(module.id)}">Deactivate</button>` : ''}
-        <button class="small-button secondary" data-licenses="${escapeHtml(module.id)}">Serial access</button>
+        <button class="small-button secondary" data-licenses="${escapeHtml(module.id)}">Manage serials</button>
       </div>`;
     moduleList.append(card);
   }
@@ -148,6 +164,7 @@ async function refreshDashboard() {
   try {
     const [modules] = await Promise.all([api('/api/modules'), loadHistory(true)]);
     renderModules(modules);
+    if (modules.modules.length > 0) await loadLicenses();
   } catch (error) {
     if (!appShell.classList.contains('hidden')) showToast(error.message, true);
   }
@@ -181,7 +198,9 @@ function renderLicenses(licenses) {
 }
 
 async function loadLicenses() {
-  const result = await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses`);
+  const moduleId = licenseModuleSelect.value;
+  if (!moduleId) return;
+  const result = await api(`/api/modules/${encodeURIComponent(moduleId)}/licenses`);
   renderLicenses(result.licenses);
 }
 
@@ -258,18 +277,12 @@ document.querySelector('#module-form').addEventListener('submit', async (event) 
 moduleList.addEventListener('click', async (event) => {
   const licensesButton = event.target.closest('[data-licenses]');
   if (licensesButton) {
-    selectedLicenseModuleId = licensesButton.dataset.licenses;
-    const card = licensesButton.closest('.module-card');
-    document.querySelector('#license-module-label').textContent =
-      `Manage serial-number access for ${card.querySelector('.module-name').textContent}.`;
-    document.querySelector('#license-error').textContent = '';
-    document.querySelector('#license-form').reset();
-    licenseDialog.showModal();
+    licenseModuleSelect.value = licensesButton.dataset.licenses;
+    document.querySelector('#serial-licenses').scrollIntoView({ behavior: 'smooth' });
     try {
       await loadLicenses();
     } catch (error) {
       showToast(error.message, true);
-      licenseDialog.close();
     }
     return;
   }
@@ -303,12 +316,17 @@ document.querySelector('#license-form').addEventListener('submit', async (event)
   event.preventDefault();
   const form = event.currentTarget;
   const data = new FormData(form);
+  const moduleId = licenseModuleSelect.value;
   const serialNumber = data.get('serialNumber');
   const action = event.submitter?.value;
   const days = Number(data.get('days'));
   const error = document.querySelector('#license-error');
   const buttons = [...form.querySelectorAll('button[type="submit"]')];
   error.textContent = '';
+  if (!moduleId) {
+    error.textContent = 'Add and select a module first.';
+    return;
+  }
   if (action === 'activate' && (!Number.isInteger(days) || days < 1 || days > 3650)) {
     error.textContent = 'Enter a whole number of activation days from 1 to 3650.';
     return;
@@ -316,13 +334,13 @@ document.querySelector('#license-form').addEventListener('submit', async (event)
   buttons.forEach((button) => { button.disabled = true; });
   try {
     if (action === 'register') {
-      await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses`, {
+      await api(`/api/modules/${encodeURIComponent(moduleId)}/licenses`, {
         method: 'POST',
         body: JSON.stringify({ serialNumber }),
       });
       showToast('Serial number registered as inactive.');
     } else {
-      await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses/activate`, {
+      await api(`/api/modules/${encodeURIComponent(moduleId)}/licenses/activate`, {
         method: 'POST',
         body: JSON.stringify({ serialNumber, days }),
       });
@@ -335,6 +353,15 @@ document.querySelector('#license-form').addEventListener('submit', async (event)
     error.textContent = requestError.message;
   } finally {
     buttons.forEach((button) => { button.disabled = false; });
+  }
+});
+
+licenseModuleSelect.addEventListener('change', async () => {
+  document.querySelector('#license-error').textContent = '';
+  try {
+    await loadLicenses();
+  } catch (error) {
+    showToast(error.message, true);
   }
 });
 
@@ -351,7 +378,7 @@ document.querySelector('#license-list').addEventListener('click', async (event) 
   button.disabled = true;
   try {
     const endpointAction = actionButton.dataset.licenseAction;
-    await api(`/api/modules/${encodeURIComponent(selectedLicenseModuleId)}/licenses/${encodeURIComponent(actionButton.dataset.licenseId)}/${endpointAction}`, {
+      await api(`/api/modules/${encodeURIComponent(licenseModuleSelect.value)}/licenses/${encodeURIComponent(actionButton.dataset.licenseId)}/${endpointAction}`, {
       method: 'POST',
       body: '{}',
     });
