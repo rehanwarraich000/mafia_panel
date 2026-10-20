@@ -741,6 +741,11 @@ app.use(express.static(path.join(__dirname, 'public'), {
   dotfiles: 'deny',
   etag: true,
   maxAge: secureCookie ? '1h' : 0,
+  setHeaders(res, filePath) {
+    if (['.html', '.js', '.css'].includes(path.extname(filePath))) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  },
 }));
 
 // Yahan root route add kar diya gaya hai taake browser mein seedha index.html load ho:
